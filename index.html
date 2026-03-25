@@ -720,20 +720,37 @@
         };
 
         // Сообщения
-        function listenForMessages() {
-            if (!currentUser) return;
-            db.collectionGroup('messages').where('receiverId', '==', currentUser.uid).onSnapshot(async (snapshot) => {
-                for (const change of snapshot.docChanges()) {
-                    const msg = change.doc.data();
-                    if (change.type === 'added' && msg.senderId !== currentUser.uid) {
-                        const senderDoc = await db.collection('users').doc(msg.senderId).get();
-                        const sender = senderDoc.data();
-                        if (sender) showNotification(sender.username, msg.text, msg.senderId);
-                        if (!msg.delivered) await change.doc.ref.update({ delivered: true, deliveredAt: new Date() });
+function listenForMessages() {
+    if (!currentUser) return;
+    
+    // Получаем все сообщения (без where)
+    db.collectionGroup('messages').onSnapshot(async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+            if (change.type === 'added') {
+                const msg = change.doc.data();
+                // Фильтруем на клиенте
+                if (msg.receiverId === currentUser.uid && msg.senderId !== currentUser.uid) {
+                    const senderDoc = await db.collection('users').doc(msg.senderId).get();
+                    const sender = senderDoc.data();
+                    if (sender) {
+                        const registration = await navigator.serviceWorker.getRegistration();
+                        if (registration) {
+                            registration.showNotification(`📩 ${sender.username}`, {
+                                body: msg.text.length > 50 ? msg.text.substring(0, 50) + '...' : msg.text,
+                                icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23075e54"/%3E%3Ctext x="50" y="70" font-size="55" text-anchor="middle" fill="white"%3EL%3C/text%3E%3C/svg%3E',
+                                tag: msg.senderId,
+                                vibrate: [200, 100, 200]
+                            });
+                        }
+                        if (!msg.delivered) {
+                            await change.doc.ref.update({ delivered: true, deliveredAt: new Date() });
+                        }
                     }
                 }
-            });
+            }
         }
+    });
+}
 
         window.selectUser = async function (userId) {
             closeSidebar();
