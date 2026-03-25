@@ -1,6 +1,7 @@
 {
   "name": "LinarChat",
   "short_name": "LinarChat",
+  "description": "Простой мессенджер",
   "start_url": "/linarchat/",
   "display": "standalone",
   "theme_color": "#075e54",
