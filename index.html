@@ -875,6 +875,56 @@ function listenForMessages() {
         window.addEventListener('beforeunload', async () => { if (currentUser) await db.collection('users').doc(currentUser.uid).update({ status: 'offline', lastSeen: new Date().toISOString() }); });
         registerServiceWorker();
         restoreSession();
+        // ============ АВТОМАТИЧЕСКОЕ УДАЛЕНИЕ СТАРЫХ СООБЩЕНИЙ ============
+
+// Функция удаления сообщений старше 15 дней
+async function deleteOldMessages() {
+    if (!currentUser) return;
+    
+    const fifteenDaysAgo = new Date();
+    fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+    
+    console.log(`🧹 Начинаю очистку сообщений старше ${fifteenDaysAgo.toLocaleDateString()}`);
+    
+    try {
+        // Получаем все сообщения, где мы участник (отправитель или получатель)
+        const allMessages = await db.collectionGroup('messages')
+            .where('timestamp', '<', fifteenDaysAgo)
+            .get();
+        
+        let deletedCount = 0;
+        
+        // Удаляем только сообщения, где пользователь является участником
+        for (const doc of allMessages.docs) {
+            const msg = doc.data();
+            if (msg.senderId === currentUser.uid || msg.receiverId === currentUser.uid) {
+                await doc.ref.delete();
+                deletedCount++;
+            }
+        }
+        
+        if (deletedCount > 0) {
+            console.log(`✅ Удалено ${deletedCount} старых сообщений`);
+        }
+        
+    } catch (error) {
+        console.error('❌ Ошибка при удалении старых сообщений:', error);
+    }
+}
+
+// Запускаем очистку при входе
+setTimeout(() => {
+    if (currentUser) {
+        deleteOldMessages();
+    }
+}, 5000);
+
+// Запускаем очистку каждый день (24 часа)
+setInterval(() => {
+    if (currentUser) {
+        deleteOldMessages();
+    }
+}, 24 * 60 * 60 * 1000);
     </script>
 </body>
 
