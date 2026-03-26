@@ -721,10 +721,10 @@
         };
 
         // Сообщения
-    function listenForMessages() {
+   function listenForMessages() {
     if (!currentUser) return;
     
-    // Получаем ВСЕ сообщения (без where)
+    // Получаем ВСЕ сообщения (без where) - не требует индекса
     db.collectionGroup('messages').onSnapshot(async (snapshot) => {
         for (const change of snapshot.docChanges()) {
             const msg = change.doc.data();
@@ -733,7 +733,8 @@
             // Фильтруем на клиенте
             if (change.type === 'added' && 
                 msg.receiverId === currentUser.uid && 
-                msg.senderId !== currentUser.uid && 
+                msg.senderId !== currentUser.uid &&
+                msg.read === false &&
                 !loadedMessages.has(msgId)) {
                 
                 loadedMessages.add(msgId);
@@ -752,10 +753,11 @@
                         });
                     }
                 }
-                
-                if (!msg.delivered) {
-                    await change.doc.ref.update({ delivered: true, deliveredAt: new Date() });
-                }
+            }
+            
+            // Отмечаем как доставленное
+            if (change.type === 'added' && msg.receiverId === currentUser.uid && !msg.delivered) {
+                await change.doc.ref.update({ delivered: true, deliveredAt: new Date() });
             }
         }
     });
