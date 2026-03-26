@@ -854,7 +854,7 @@
             try {
                 showToast('🔄 Подключение...');
                 const userCredential = await auth.signInAnonymously();
-                currentUser = { uid: userCredential.user.uid, username: username };
+                currentUser = { uid: userCredential.user.uid, username: username }; loadedMessages.clear();
                 const existingUsers = await db.collection('users').where('username', '==', username).get();
                 for (const doc of existingUsers.docs) { if (doc.id !== currentUser.uid) await db.collection('users').doc(doc.id).delete(); }
                 await db.collection('users').doc(currentUser.uid).set({ username, status: 'online', lastSeen: new Date().toISOString(), createdAt: new Date().toISOString() });
