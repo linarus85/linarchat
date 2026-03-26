@@ -831,7 +831,7 @@
                 const userDoc = await db.collection('users').doc(saved.uid).get();
                 if (userDoc.exists) {
                     const userData = userDoc.data();
-                    currentUser = { uid: saved.uid, username: userData.username };
+                    currentUser = { uid: saved.uid, username: userData.username }; loadedMessages.clear();
                     currentUserNameSpan.textContent = userData.username;
                     currentUserIdSpan.textContent = `ID: ${currentUser.uid.slice(0, 8)}...`;
                     await db.collection('users').doc(currentUser.uid).update({ status: 'online', lastSeen: new Date().toISOString() });
