@@ -206,6 +206,12 @@
             background: rgba(255, 255, 255, 0.15);
             border-radius: 12px;
             backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .user-profile:active {
+            background: rgba(255, 255, 255, 0.25);
         }
 
         .user-name-display {
@@ -660,6 +666,55 @@
             background: #e0e0e0;
             color: #666;
         }
+
+        .logout-confirm {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            width: 280px;
+            text-align: center;
+            z-index: 10002;
+            display: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .logout-confirm.active {
+            display: block;
+        }
+
+        .logout-confirm h4 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .logout-confirm p {
+            margin-bottom: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .logout-confirm button {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn-confirm {
+            background: #ff4444;
+            color: white;
+        }
+
+        .btn-cancel {
+            background: #e0e0e0;
+            color: #666;
+        }
     </style>
 </head>
 
@@ -692,7 +747,7 @@
                                 Linar<span>Chat</span>
                             </div>
                         </div>
-                        <div class="user-profile">
+                        <div class="user-profile" id="userProfileBtn">
                             <div class="user-name-display" id="currentUserName"></div>
                             <div class="user-status-badge">Online</div>
                         </div>
@@ -731,6 +786,12 @@
         <button class="btn-allow" id="allowNotificationsBtn">✅ Включить</button>
         <button class="btn-later" id="laterNotificationsBtn">⏰ Позже</button>
     </div>
+    <div id="logoutConfirm" class="logout-confirm">
+        <h4>🚪 Выйти из аккаунта?</h4>
+        <p>Вы уверены, что хотите выйти?</p>
+        <button class="btn-confirm" id="confirmLogoutBtn">Да, выйти</button>
+        <button class="btn-cancel" id="cancelLogoutBtn">Отмена</button>
+    </div>
 
     <script>
         const firebaseConfig = {
@@ -750,6 +811,7 @@
         let currentChat = null;
         let unsubscribeMessages = null;
         let loadedMessages = new Set();
+        let lastNotificationTime = {};
 
         const loginScreen = document.getElementById('loginScreen');
         const chatScreen = document.getElementById('chatScreen');
@@ -770,6 +832,10 @@
         const notificationPrompt = document.getElementById('notificationPrompt');
         const allowNotificationsBtn = document.getElementById('allowNotificationsBtn');
         const laterNotificationsBtn = document.getElementById('laterNotificationsBtn');
+        const logoutConfirm = document.getElementById('logoutConfirm');
+        const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+        const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+        const userProfileBtn = document.getElementById('userProfileBtn');
 
         window.openImageFullscreen = function (url) { modalImage.src = url; imageModal.classList.add('active'); };
         function closeImageModal() { imageModal.classList.remove('active'); modalImage.src = ''; }
@@ -794,6 +860,19 @@
         
         menuToggle.onclick = openSidebar;
         sidebarOverlay.onclick = closeSidebar;
+        
+        userProfileBtn.onclick = () => {
+            logoutConfirm.classList.add('active');
+        };
+        
+        confirmLogoutBtn.onclick = async () => {
+            logoutConfirm.classList.remove('active');
+            await logout();
+        };
+        
+        cancelLogoutBtn.onclick = () => {
+            logoutConfirm.classList.remove('active');
+        };
 
         async function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
@@ -833,7 +912,6 @@
                 if (permission === 'granted') {
                     const registration = await registerServiceWorker();
                     if (registration) {
-                        // Показываем тестовое уведомление
                         await registration.showNotification('✅ Уведомления включены!', {
                             body: 'Теперь вы будете получать уведомления о новых сообщениях',
                             icon: '/linarchat/icon-192.png',
@@ -878,8 +956,16 @@
             localStorage.setItem('notification_prompt_shown', 'true');
         };
 
-        async function showNotification(senderName, message, senderId) {
+        async function showNotification(senderName, message, senderId, messageId) {
             if (Notification.permission !== 'granted') return;
+            
+            const notificationKey = `${senderId}_${messageId}`;
+            if (lastNotificationTime[notificationKey]) return;
+            lastNotificationTime[notificationKey] = Date.now();
+            
+            setTimeout(() => {
+                delete lastNotificationTime[notificationKey];
+            }, 5000);
             
             const isAppVisible = document.visibilityState === 'visible' && 
                                  document.hasFocus() && 
@@ -895,14 +981,15 @@
                     body: notificationBody,
                     icon: '/linarchat/icon-192.png',
                     badge: '/linarchat/icon-192.png',
-                    tag: `msg_${senderId}_${Date.now()}`,
+                    tag: `msg_${senderId}_${messageId}`,
                     vibrate: [200, 100, 200],
                     renotify: false,
                     requireInteraction: true,
                     data: { 
                         senderId: senderId,
                         url: '/linarchat/',
-                        timestamp: Date.now()
+                        timestamp: Date.now(),
+                        messageId: messageId
                     },
                     actions: [
                         {
@@ -959,16 +1046,18 @@
                             
                             loadedMessages.add(msgId);
                             
-                            try {
-                                const senderDoc = await db.collection('users').doc(msg.senderId).get();
-                                const sender = senderDoc.data();
-                                
-                                if (sender && sender.username) {
-                                    const messageText = msg.type === 'image' ? '📷 Изображение' : msg.text;
-                                    await showNotification(sender.username, messageText, msg.senderId);
+                            if (!msg.read) {
+                                try {
+                                    const senderDoc = await db.collection('users').doc(msg.senderId).get();
+                                    const sender = senderDoc.data();
+                                    
+                                    if (sender && sender.username) {
+                                        const messageText = msg.type === 'image' ? '📷 Изображение' : msg.text;
+                                        await showNotification(sender.username, messageText, msg.senderId, msgId);
+                                    }
+                                } catch (e) {
+                                    console.error('Error getting sender:', e);
                                 }
-                            } catch (e) {
-                                console.error('Error getting sender:', e);
                             }
                         }
                         
@@ -1111,7 +1200,7 @@
             if (saved) { 
                 try { 
                     const session = JSON.parse(saved); 
-                    if ((new Date() - new Date(session.savedAt)) / (1000 * 60 * 60 * 24) < 30) return session; 
+                    return session;
                 } catch (e) { } 
             } 
             return null; 
@@ -1155,6 +1244,30 @@
             return false;
         }
 
+        async function logout() {
+            if (currentUser) {
+                await db.collection('users').doc(currentUser.uid).update({ 
+                    status: 'offline', 
+                    lastSeen: new Date().toISOString() 
+                });
+            }
+            
+            if (unsubscribeMessages) unsubscribeMessages();
+            
+            loginScreen.classList.add('active');
+            chatScreen.classList.remove('active');
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            imageBtn.disabled = true;
+            currentChat = null;
+            currentUser = null;
+            usernameInput.value = '';
+            messagesDiv.innerHTML = '<div class="empty-state">💬 Нажмите ☰ и выберите собеседника</div>';
+            chatUserNameSpan.textContent = 'Выберите собеседника';
+            
+            showToast('👋 Вы вышли из аккаунта');
+        }
+
         loginBtn.onclick = async () => {
             const username = usernameInput.value.trim();
             if (!username) { showToast('❌ Введите ваше имя'); return; }
@@ -1179,19 +1292,9 @@
                 listenForMessages();
                 showToast(`✅ Добро пожаловать, ${username}!`);
                 await registerServiceWorker();
-                
-                // Показываем запрос на уведомления после входа
                 showNotificationPrompt();
             } catch (error) { showToast('❌ Ошибка: ' + error.message); }
         };
-
-        function autoLogout() {
-            window.addEventListener('beforeunload', async () => { 
-                if (currentUser) await db.collection('users').doc(currentUser.uid).update({ 
-                    status: 'offline', lastSeen: new Date().toISOString() 
-                }); 
-            });
-        }
         
         function escapeHtml(text) { 
             const div = document.createElement('div'); 
@@ -1206,8 +1309,6 @@
                 }); 
             } 
         }, 15000);
-        
-        autoLogout();
         
         function checkAppState() {
             document.addEventListener('visibilitychange', () => {
@@ -1252,7 +1353,10 @@
         
         async function initialize() {
             await registerServiceWorker();
-            await restoreSession();
+            const restored = await restoreSession();
+            if (!restored) {
+                clearSession();
+            }
             checkAppState();
         }
         
