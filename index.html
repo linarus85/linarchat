@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#075e54">
     <title>LinarChat</title>
 
@@ -19,7 +20,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
     <style>
-        /* Весь ваш CSS стили - скопируйте из предыдущего кода */
         * {
             margin: 0;
             padding: 0;
@@ -27,8 +27,7 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        html,
-        body {
+        html, body {
             width: 100%;
             height: 100%;
             overflow: hidden;
@@ -178,9 +177,7 @@
             word-break: break-all;
         }
 
-        .logout-btn,
-        .copy-btn,
-        .notify-btn {
+        .logout-btn, .copy-btn, .notify-btn {
             background: rgba(255, 255, 255, 0.2);
             border: none;
             color: white;
@@ -326,7 +323,6 @@
                 opacity: 0;
                 transform: translateY(10px);
             }
-
             to {
                 opacity: 1;
                 transform: translateY(0);
@@ -463,11 +459,9 @@
                 opacity: 1;
                 transform: translateX(-50%) scale(1);
             }
-
             70% {
                 opacity: 1;
             }
-
             100% {
                 opacity: 0;
                 transform: translateX(-50%) scale(0.95);
@@ -611,7 +605,6 @@
             appId: "1:120171949297:web:ee7a964c4f0c7442960d50"
         };
 
-
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
@@ -645,9 +638,25 @@
 
         window.openImageFullscreen = function (url) { modalImage.src = url; imageModal.classList.add('active'); };
         function closeImageModal() { imageModal.classList.remove('active'); modalImage.src = ''; }
-        function showToast(msg) { const toast = document.createElement('div'); toast.className = 'toast'; toast.textContent = msg; document.body.appendChild(toast); setTimeout(() => toast.remove(), 2500); }
-        function openSidebar() { document.getElementById('sidebar').classList.add('open'); sidebarOverlay.classList.add('active'); }
-        function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+        
+        function showToast(msg) { 
+            const toast = document.createElement('div'); 
+            toast.className = 'toast'; 
+            toast.textContent = msg; 
+            document.body.appendChild(toast); 
+            setTimeout(() => toast.remove(), 2500); 
+        }
+        
+        function openSidebar() { 
+            document.getElementById('sidebar').classList.add('open'); 
+            sidebarOverlay.classList.add('active'); 
+        }
+        
+        function closeSidebar() { 
+            document.getElementById('sidebar').classList.remove('open'); 
+            sidebarOverlay.classList.remove('active'); 
+        }
+        
         menuToggle.onclick = openSidebar;
         sidebarOverlay.onclick = closeSidebar;
 
@@ -665,39 +674,95 @@
             return null;
         }
 
-        // Уведомления
+        // Функция для проверки поддержки уведомлений
+        function isNotificationSupported() {
+            return 'Notification' in window && 'serviceWorker' in navigator;
+        }
+
+        // Улучшенная функция включения уведомлений
         async function enableNotifications() {
-            if (!('Notification' in window)) {
+            if (!isNotificationSupported()) {
                 showToast('❌ Ваш браузер не поддерживает уведомления');
                 return false;
             }
+            
             try {
-                const permission = await Notification.requestPermission();
+                let permission = Notification.permission;
+                
+                if (permission !== 'granted') {
+                    permission = await Notification.requestPermission();
+                }
+                
                 if (permission === 'granted') {
-                    await registerServiceWorker();
-                    showToast('✅ Уведомления включены!');
-                    enableNotificationsBtn.textContent = '🔔 Уведомления включены';
-                    enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)';
-                    return true;
+                    const registration = await registerServiceWorker();
+                    
+                    if (registration) {
+                        showToast('✅ Уведомления включены!');
+                        enableNotificationsBtn.textContent = '🔔 Уведомления включены';
+                        enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)';
+                        localStorage.setItem('notifications_enabled', 'true');
+                        return true;
+                    }
                 } else {
                     showToast('❌ Разрешите уведомления в настройках браузера');
                     return false;
                 }
-            } catch (e) { showToast('❌ Ошибка: ' + e.message); return false; }
+            } catch (e) {
+                console.error('Notification error:', e);
+                showToast('❌ Ошибка: ' + e.message);
+                return false;
+            }
         }
+        
         enableNotificationsBtn.onclick = enableNotifications;
 
+        // Улучшенная функция показа уведомлений
         async function showNotification(senderName, message, senderId) {
             if (Notification.permission !== 'granted') return;
+            
+            const isAppVisible = document.visibilityState === 'visible' && 
+                                 document.hasFocus() && 
+                                 currentChat === senderId;
+            
+            if (isAppVisible) return;
+            
             const registration = await navigator.serviceWorker.getRegistration();
             if (registration) {
-                registration.showNotification(`📩 Новое сообщение от ${senderName}`, {
+                const options = {
                     body: message.length > 60 ? message.substring(0, 60) + '...' : message,
-                    icon: '/icon-192.png',
+                    icon: '/linarchat/icon-192.png',
+                    badge: '/linarchat/icon-192.png',
                     tag: senderId,
                     vibrate: [200, 100, 200],
-                    data: { senderId: senderId }
-                });
+                    renotify: false,
+                    requireInteraction: true,
+                    data: { 
+                        senderId: senderId,
+                        url: '/linarchat/',
+                        timestamp: Date.now()
+                    },
+                    actions: [
+                        {
+                            action: 'open',
+                            title: '📱 Открыть чат'
+                        },
+                        {
+                            action: 'close',
+                            title: '🔕 Закрыть'
+                        }
+                    ]
+                };
+                
+                try {
+                    await registration.showNotification(`📩 ${senderName}`, options);
+                } catch (e) {
+                    console.error('Show notification error:', e);
+                    await registration.showNotification(`📩 Новое сообщение от ${senderName}`, {
+                        body: message.length > 60 ? message.substring(0, 60) + '...' : message,
+                        icon: '/linarchat/icon-192.png',
+                        vibrate: [200, 100, 200]
+                    });
+                }
             }
         }
 
@@ -710,10 +775,15 @@
             if (file.size > 2 * 1024 * 1024) { showToast('❌ Картинка слишком большая (макс 2МБ)'); return; }
             showToast('📤 Отправка...');
             try {
-                const base64 = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (e) => resolve(e.target.result); reader.readAsDataURL(file); });
+                const base64 = await new Promise((resolve) => { 
+                    const reader = new FileReader(); 
+                    reader.onload = (e) => resolve(e.target.result); 
+                    reader.readAsDataURL(file); 
+                });
                 const chatId = [currentUser.uid, currentChat].sort().join('_');
                 await db.collection('chats').doc(chatId).collection('messages').add({
-                    text: base64, type: 'image', senderId: currentUser.uid, receiverId: currentChat, timestamp: new Date(), read: false, delivered: false
+                    text: base64, type: 'image', senderId: currentUser.uid, receiverId: currentChat, 
+                    timestamp: new Date(), read: false, delivered: false
                 });
                 showToast('✅ Картинка отправлена!');
             } catch (error) { showToast('❌ Ошибка отправки'); }
@@ -721,47 +791,50 @@
         };
 
         // Сообщения
-   function listenForMessages() {
-    if (!currentUser) return;
-    
-    // Получаем ВСЕ сообщения (без where) - не требует индекса
-    db.collectionGroup('messages').onSnapshot(async (snapshot) => {
-        for (const change of snapshot.docChanges()) {
-            const msg = change.doc.data();
-            const msgId = change.doc.id;
+        function listenForMessages() {
+            if (!currentUser) return;
             
-            // Фильтруем на клиенте
-            if (change.type === 'added' && 
-                msg.receiverId === currentUser.uid && 
-                msg.senderId !== currentUser.uid &&
-                msg.read === false &&
-                !loadedMessages.has(msgId)) {
-                
-                loadedMessages.add(msgId);
-                
-                const senderDoc = await db.collection('users').doc(msg.senderId).get();
-                const sender = senderDoc.data();
-                if (sender) {
-                    const registration = await navigator.serviceWorker.getRegistration();
-                    if (registration) {
-                        registration.showNotification(`📩 Новое сообщение от ${sender.username}`, {
-                            body: msg.text.length > 60 ? msg.text.substring(0, 60) + '...' : msg.text,
-                            icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect width="100" height="100" fill="%23075e54"/%3E%3Ctext x="50" y="70" font-size="55" text-anchor="middle" fill="white"%3EL%3C/text%3E%3C/svg%3E',
-                            tag: msg.senderId,
-                            vibrate: [200, 100, 200],
-                            data: { senderId: msg.senderId, url: '/linarchat/' }
-                        });
+            db.collectionGroup('messages').onSnapshot(async (snapshot) => {
+                for (const change of snapshot.docChanges()) {
+                    const msg = change.doc.data();
+                    const msgId = change.doc.id;
+                    
+                    if (change.type === 'added') {
+                        if (msg.receiverId === currentUser.uid && 
+                            msg.senderId !== currentUser.uid &&
+                            !loadedMessages.has(msgId)) {
+                            
+                            loadedMessages.add(msgId);
+                            
+                            try {
+                                const senderDoc = await db.collection('users').doc(msg.senderId).get();
+                                const sender = senderDoc.data();
+                                
+                                if (sender && sender.username) {
+                                    const messageText = msg.type === 'image' ? '📷 Изображение' : msg.text;
+                                    await showNotification(sender.username, messageText, msg.senderId);
+                                }
+                            } catch (e) {
+                                console.error('Error getting sender:', e);
+                            }
+                        }
+                        
+                        if (msg.receiverId === currentUser.uid && !msg.delivered) {
+                            try {
+                                await change.doc.ref.update({ 
+                                    delivered: true, 
+                                    deliveredAt: new Date() 
+                                });
+                            } catch (e) {
+                                console.error('Error marking delivered:', e);
+                            }
+                        }
                     }
                 }
-            }
-            
-            // Отмечаем как доставленное
-            if (change.type === 'added' && msg.receiverId === currentUser.uid && !msg.delivered) {
-                await change.doc.ref.update({ delivered: true, deliveredAt: new Date() });
-            }
+            }, (error) => {
+                console.error('Messages listener error:', error);
+            });
         }
-    });
-}
 
         window.selectUser = async function (userId) {
             closeSidebar();
@@ -771,18 +844,30 @@
             const userData = userDoc.data();
             const isOnline = userData.status === 'online' && (new Date() - new Date(userData.lastSeen)) < 60000;
             chatUserNameSpan.textContent = userData.username + (isOnline ? ' 🟢' : ' ⚫');
-            messageInput.disabled = false; sendBtn.disabled = false; imageBtn.disabled = false; messageInput.focus();
+            messageInput.disabled = false; 
+            sendBtn.disabled = false; 
+            imageBtn.disabled = false; 
+            messageInput.focus();
             const chatId = [currentUser.uid, userId].sort().join('_');
-            unsubscribeMessages = db.collection('chats').doc(chatId).collection('messages').orderBy('timestamp', 'asc').onSnapshot((snapshot) => {
-                const messages = []; snapshot.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
-                renderMessages(messages);
-                messages.forEach(msg => { if (msg.receiverId === currentUser.uid && !msg.read) { db.collection('chats').doc(chatId).collection('messages').doc(msg.id).update({ read: true, readAt: new Date() }); } });
-            });
+            unsubscribeMessages = db.collection('chats').doc(chatId).collection('messages')
+                .orderBy('timestamp', 'asc')
+                .onSnapshot((snapshot) => {
+                    const messages = []; 
+                    snapshot.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
+                    renderMessages(messages);
+                    messages.forEach(msg => { 
+                        if (msg.receiverId === currentUser.uid && !msg.read) { 
+                            db.collection('chats').doc(chatId).collection('messages')
+                                .doc(msg.id).update({ read: true, readAt: new Date() }); 
+                        } 
+                    });
+                });
         };
 
         function loadUsers() {
             db.collection('users').onSnapshot((snapshot) => {
-                const users = []; const now = new Date();
+                const users = []; 
+                const now = new Date();
                 snapshot.forEach(doc => {
                     if (doc.id !== currentUser?.uid) {
                         const data = doc.data();
@@ -793,25 +878,50 @@
                     }
                 });
                 users.sort((a, b) => a.username.localeCompare(b.username));
-                if (users.length === 0) { usersList.innerHTML = '<div class="empty-state">👥 Нет других пользователей</div>'; }
-                else {
-                    usersList.innerHTML = users.map(user => `<div class="user-item" onclick="selectUser('${user.id}')"><div><div class="user-name">${escapeHtml(user.username)}</div><div class="user-status ${user.isOnline ? 'online' : 'offline'}">${user.isOnline ? '🟢 Онлайн' : '⚫ Офлайн'}</div></div></div>`).join('');
+                if (users.length === 0) { 
+                    usersList.innerHTML = '<div class="empty-state">👥 Нет других пользователей</div>'; 
+                } else {
+                    usersList.innerHTML = users.map(user => `
+                        <div class="user-item" onclick="selectUser('${user.id}')">
+                            <div>
+                                <div class="user-name">${escapeHtml(user.username)}</div>
+                                <div class="user-status ${user.isOnline ? 'online' : 'offline'}">
+                                    ${user.isOnline ? '🟢 Онлайн' : '⚫ Офлайн'}
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
                 }
             });
         }
 
         function renderMessages(messages) {
-            if (messages.length === 0) { messagesDiv.innerHTML = '<div class="empty-state">💬 Напишите первое сообщение</div>'; return; }
+            if (messages.length === 0) { 
+                messagesDiv.innerHTML = '<div class="empty-state">💬 Напишите первое сообщение</div>'; 
+                return; 
+            }
             messagesDiv.innerHTML = messages.map(msg => {
                 const isOwn = msg.senderId === currentUser.uid;
                 const time = msg.timestamp?.toDate ? new Date(msg.timestamp.toDate()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
                 const isImage = msg.type === 'image';
                 let statusIcon = '';
-                if (isOwn) { if (msg.read) { statusIcon = '<span class="message-status">✓✓</span>'; } else if (msg.delivered) { statusIcon = '<span class="message-status">✓✓</span>'; } else { statusIcon = '<span class="message-status">✓</span>'; } }
+                if (isOwn) { 
+                    if (msg.read) { statusIcon = '<span class="message-status">✓✓</span>'; } 
+                    else if (msg.delivered) { statusIcon = '<span class="message-status">✓✓</span>'; } 
+                    else { statusIcon = '<span class="message-status">✓</span>'; } 
+                }
                 let content = '';
-                if (isImage) { content = `<img src="${msg.text}" class="message-image" onclick="openImageFullscreen('${msg.text.replace(/'/g, "\\'")}')" loading="lazy">`; }
-                else { content = `<div class="message-text">${escapeHtml(msg.text)}</div>`; }
-                return `<div class="message ${isOwn ? 'own' : 'other'}"><div class="message-content">${content}<div class="message-time">${time} ${statusIcon}</div></div></div>`;
+                if (isImage) { 
+                    content = `<img src="${msg.text}" class="message-image" onclick="openImageFullscreen('${msg.text.replace(/'/g, "\\'")}')" loading="lazy">`; 
+                } else { 
+                    content = `<div class="message-text">${escapeHtml(msg.text)}</div>`; 
+                }
+                return `<div class="message ${isOwn ? 'own' : 'other'}">
+                            <div class="message-content">
+                                ${content}
+                                <div class="message-time">${time} ${statusIcon}</div>
+                            </div>
+                        </div>`;
             }).join('');
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -820,15 +930,45 @@
             const text = messageInput.value.trim();
             if (!text || !currentChat) return;
             const chatId = [currentUser.uid, currentChat].sort().join('_');
-            await db.collection('chats').doc(chatId).collection('messages').add({ text: text, type: 'text', senderId: currentUser.uid, receiverId: currentChat, timestamp: new Date(), read: false, delivered: false });
-            messageInput.value = ''; messageInput.style.height = 'auto'; showToast('📤 Сообщение отправлено');
+            await db.collection('chats').doc(chatId).collection('messages').add({ 
+                text: text, type: 'text', senderId: currentUser.uid, receiverId: currentChat, 
+                timestamp: new Date(), read: false, delivered: false 
+            });
+            messageInput.value = ''; 
+            messageInput.style.height = 'auto'; 
+            showToast('📤 Сообщение отправлено');
         };
-        messageInput.onkeypress = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); } };
-        messageInput.oninput = function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 100) + 'px'; };
+        
+        messageInput.onkeypress = (e) => { 
+            if (e.key === 'Enter' && !e.shiftKey) { 
+                e.preventDefault(); 
+                sendBtn.click(); 
+            } 
+        };
+        
+        messageInput.oninput = function () { 
+            this.style.height = 'auto'; 
+            this.style.height = Math.min(this.scrollHeight, 100) + 'px'; 
+        };
 
-        function saveSession(username, uid) { localStorage.setItem('linarchat_session', JSON.stringify({ username, uid, savedAt: new Date().toISOString() })); }
-        function getSavedSession() { const saved = localStorage.getItem('linarchat_session'); if (saved) { try { const session = JSON.parse(saved); if ((new Date() - new Date(session.savedAt)) / (1000 * 60 * 60 * 24) < 30) return session; } catch (e) { } } return null; }
-        function clearSession() { localStorage.removeItem('linarchat_session'); }
+        function saveSession(username, uid) { 
+            localStorage.setItem('linarchat_session', JSON.stringify({ username, uid, savedAt: new Date().toISOString() })); 
+        }
+        
+        function getSavedSession() { 
+            const saved = localStorage.getItem('linarchat_session'); 
+            if (saved) { 
+                try { 
+                    const session = JSON.parse(saved); 
+                    if ((new Date() - new Date(session.savedAt)) / (1000 * 60 * 60 * 24) < 30) return session; 
+                } catch (e) { } 
+            } 
+            return null; 
+        }
+        
+        function clearSession() { 
+            localStorage.removeItem('linarchat_session'); 
+        }
 
         async function restoreSession() {
             const saved = getSavedSession();
@@ -837,17 +977,34 @@
                 const userDoc = await db.collection('users').doc(saved.uid).get();
                 if (userDoc.exists) {
                     const userData = userDoc.data();
-                    currentUser = { uid: saved.uid, username: userData.username }; loadedMessages.clear();
+                    currentUser = { uid: saved.uid, username: userData.username }; 
+                    loadedMessages.clear();
                     currentUserNameSpan.textContent = userData.username;
                     currentUserIdSpan.textContent = `ID: ${currentUser.uid.slice(0, 8)}...`;
-                    await db.collection('users').doc(currentUser.uid).update({ status: 'online', lastSeen: new Date().toISOString() });
-                    loginScreen.classList.remove('active'); chatScreen.classList.add('active');
-                    loadUsers(); listenForMessages();
+                    await db.collection('users').doc(currentUser.uid).update({ 
+                        status: 'online', 
+                        lastSeen: new Date().toISOString() 
+                    });
+                    loginScreen.classList.remove('active'); 
+                    chatScreen.classList.add('active');
+                    loadUsers(); 
+                    listenForMessages();
                     showToast(`✅ С возвращением, ${userData.username}!`);
-                    const pending = await db.collectionGroup('messages').where('receiverId', '==', currentUser.uid).where('delivered', '==', false).get();
-                    for (const doc of pending.docs) { await doc.ref.update({ delivered: true, deliveredAt: new Date() }); }
+                    
+                    const pending = await db.collectionGroup('messages')
+                        .where('receiverId', '==', currentUser.uid)
+                        .where('delivered', '==', false)
+                        .get();
+                    for (const doc of pending.docs) { 
+                        await doc.ref.update({ delivered: true, deliveredAt: new Date() }); 
+                    }
                     if (pending.size > 0) showToast(`📬 Доставлено ${pending.size} сообщений`);
-                    if (Notification.permission === 'granted') { enableNotificationsBtn.textContent = '🔔 Уведомления включены'; enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)'; }
+                    
+                    const notificationsEnabled = localStorage.getItem('notifications_enabled');
+                    if (notificationsEnabled === 'true' && Notification.permission === 'granted') {
+                        enableNotificationsBtn.textContent = '🔔 Уведомления включены';
+                        enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)';
+                    }
                     return true;
                 }
             } catch (e) { }
@@ -860,89 +1017,141 @@
             try {
                 showToast('🔄 Подключение...');
                 const userCredential = await auth.signInAnonymously();
-                currentUser = { uid: userCredential.user.uid, username: username }; loadedMessages.clear();
+                currentUser = { uid: userCredential.user.uid, username: username }; 
+                loadedMessages.clear();
                 const existingUsers = await db.collection('users').where('username', '==', username).get();
-                for (const doc of existingUsers.docs) { if (doc.id !== currentUser.uid) await db.collection('users').doc(doc.id).delete(); }
-                await db.collection('users').doc(currentUser.uid).set({ username, status: 'online', lastSeen: new Date().toISOString(), createdAt: new Date().toISOString() });
+                for (const doc of existingUsers.docs) { 
+                    if (doc.id !== currentUser.uid) await db.collection('users').doc(doc.id).delete(); 
+                }
+                await db.collection('users').doc(currentUser.uid).set({ 
+                    username, status: 'online', lastSeen: new Date().toISOString(), 
+                    createdAt: new Date().toISOString() 
+                });
                 saveSession(username, currentUser.uid);
                 currentUserNameSpan.textContent = username;
                 currentUserIdSpan.textContent = `ID: ${currentUser.uid.slice(0, 8)}...`;
-                loginScreen.classList.remove('active'); chatScreen.classList.add('active');
-                loadUsers(); listenForMessages();
+                loginScreen.classList.remove('active'); 
+                chatScreen.classList.add('active');
+                loadUsers(); 
+                listenForMessages();
                 showToast(`✅ Добро пожаловать, ${username}!`);
                 await registerServiceWorker();
-                setTimeout(() => { if (Notification.permission !== 'granted') enableNotifications(); else { enableNotificationsBtn.textContent = '🔔 Уведомления включены'; enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)'; } }, 1000);
+                setTimeout(() => { 
+                    if (Notification.permission !== 'granted') enableNotifications(); 
+                    else { 
+                        enableNotificationsBtn.textContent = '🔔 Уведомления включены'; 
+                        enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)'; 
+                    } 
+                }, 1000);
             } catch (error) { showToast('❌ Ошибка: ' + error.message); }
         };
 
         logoutBtn.onclick = async () => {
-            if (currentUser) await db.collection('users').doc(currentUser.uid).update({ status: 'offline', lastSeen: new Date().toISOString() });
-            await auth.signOut(); clearSession(); currentUser = null; currentChat = null; loadedMessages.clear();
+            if (currentUser) await db.collection('users').doc(currentUser.uid).update({ 
+                status: 'offline', lastSeen: new Date().toISOString() 
+            });
+            await auth.signOut(); 
+            clearSession(); 
+            currentUser = null; 
+            currentChat = null; 
+            loadedMessages.clear();
             if (unsubscribeMessages) unsubscribeMessages();
-            loginScreen.classList.add('active'); chatScreen.classList.remove('active'); usernameInput.value = ''; showToast('👋 Вы вышли');
+            loginScreen.classList.add('active'); 
+            chatScreen.classList.remove('active'); 
+            usernameInput.value = ''; 
+            showToast('👋 Вы вышли');
         };
-        copyIdBtn.onclick = () => { if (currentUser) { navigator.clipboard.writeText(currentUser.uid); showToast('✅ ID скопирован!'); } };
-        function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
-        setInterval(async () => { if (currentUser && document.visibilityState === 'visible') { await db.collection('users').doc(currentUser.uid).update({ lastSeen: new Date().toISOString(), status: 'online' }); } }, 15000);
-        window.addEventListener('beforeunload', async () => { if (currentUser) await db.collection('users').doc(currentUser.uid).update({ status: 'offline', lastSeen: new Date().toISOString() }); });
-        registerServiceWorker();
-        restoreSession();
-       
-// ============ АВТОМАТИЧЕСКОЕ УДАЛЕНИЕ СТАРЫХ СООБЩЕНИЙ ============
-
-async function deleteOldMessages() {
-    if (!currentUser) return;
-    
-    const fifteenDaysAgo = new Date();
-    fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-    
-    console.log(`🧹 Начинаю очистку сообщений старше ${fifteenDaysAgo.toLocaleDateString()}`);
-    
-    try {
-        // Получаем все чаты, где есть пользователь
-        const allChats = await db.collection('chats').get();
-        let deletedCount = 0;
         
-        for (const chatDoc of allChats.docs) {
-            // Получаем все сообщения в этом чате
-            const messages = await db.collection('chats')
-                .doc(chatDoc.id)
-                .collection('messages')
-                .get();
-            
-            for (const msgDoc of messages.docs) {
-                const msg = msgDoc.data();
-                const msgDate = msg.timestamp?.toDate ? msg.timestamp.toDate() : new Date(msg.timestamp);
-                
-                // Проверяем на клиенте
-                if (msgDate < fifteenDaysAgo && 
-                    (msg.senderId === currentUser.uid || msg.receiverId === currentUser.uid)) {
-                    await msgDoc.ref.delete();
-                    deletedCount++;
+        copyIdBtn.onclick = () => { 
+            if (currentUser) { 
+                navigator.clipboard.writeText(currentUser.uid); 
+                showToast('✅ ID скопирован!'); 
+            } 
+        };
+        
+        function escapeHtml(text) { 
+            const div = document.createElement('div'); 
+            div.textContent = text; 
+            return div.innerHTML; 
+        }
+        
+        setInterval(async () => { 
+            if (currentUser && document.visibilityState === 'visible') { 
+                await db.collection('users').doc(currentUser.uid).update({ 
+                    lastSeen: new Date().toISOString(), status: 'online' 
+                }); 
+            } 
+        }, 15000);
+        
+        window.addEventListener('beforeunload', async () => { 
+            if (currentUser) await db.collection('users').doc(currentUser.uid).update({ 
+                status: 'offline', lastSeen: new Date().toISOString() 
+            }); 
+        });
+        
+        function checkAppState() {
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    console.log('App is now visible');
+                    if (currentUser) {
+                        db.collection('users').doc(currentUser.uid).update({
+                            lastSeen: new Date().toISOString(),
+                            status: 'online'
+                        });
+                    }
+                } else {
+                    console.log('App is hidden');
                 }
+            });
+        }
+        
+        async function deleteOldMessages() {
+            if (!currentUser) return;
+            const fifteenDaysAgo = new Date();
+            fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+            console.log(`🧹 Начинаю очистку сообщений старше ${fifteenDaysAgo.toLocaleDateString()}`);
+            try {
+                const allChats = await db.collection('chats').get();
+                let deletedCount = 0;
+                for (const chatDoc of allChats.docs) {
+                    const messages = await db.collection('chats')
+                        .doc(chatDoc.id)
+                        .collection('messages')
+                        .get();
+                    for (const msgDoc of messages.docs) {
+                        const msg = msgDoc.data();
+                        const msgDate = msg.timestamp?.toDate ? msg.timestamp.toDate() : new Date(msg.timestamp);
+                        if (msgDate < fifteenDaysAgo && 
+                            (msg.senderId === currentUser.uid || msg.receiverId === currentUser.uid)) {
+                            await msgDoc.ref.delete();
+                            deletedCount++;
+                        }
+                    }
+                }
+                if (deletedCount > 0) {
+                    console.log(`✅ Удалено ${deletedCount} старых сообщений`);
+                    showToast(`🧹 Удалено ${deletedCount} старых сообщений`);
+                }
+            } catch (error) {
+                console.error('❌ Ошибка при удалении:', error);
             }
         }
         
-        if (deletedCount > 0) {
-            console.log(`✅ Удалено ${deletedCount} старых сообщений`);
-            showToast(`🧹 Удалено ${deletedCount} старых сообщений`);
+        async function initialize() {
+            await registerServiceWorker();
+            await restoreSession();
+            checkAppState();
         }
         
-    } catch (error) {
-        console.error('❌ Ошибка при удалении:', error);
-    }
-}
-
-// Запускаем при входе
-setTimeout(() => {
-    if (currentUser) deleteOldMessages();
-}, 5000);
-
-// Запускаем каждый день
-setInterval(() => {
-    if (currentUser) deleteOldMessages();
-}, 24 * 60 * 60 * 1000);
-
+        initialize();
+        
+        setTimeout(() => {
+            if (currentUser) deleteOldMessages();
+        }, 5000);
+        
+        setInterval(() => {
+            if (currentUser) deleteOldMessages();
+        }, 24 * 60 * 60 * 1000);
     </script>
 </body>
 
