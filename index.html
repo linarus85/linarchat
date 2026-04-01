@@ -282,20 +282,6 @@
             color: #999;
         }
 
-        .unread-badge {
-            background: #ff4444;
-            color: white;
-            border-radius: 50%;
-            min-width: 22px;
-            height: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            font-weight: bold;
-            padding: 0 6px;
-        }
-
         .chat-area {
             flex: 1;
             display: flex;
@@ -903,26 +889,46 @@
             }
             
             if (Notification.permission === 'denied') {
-                showToast('❌ Уведомления заблокированы в настройках браузера');
+                showToast('❌ Уведомления заблокированы. Включите в настройках браузера');
                 return false;
             }
             
             try {
+                showToast('🔔 Запрос разрешения...');
                 const permission = await Notification.requestPermission();
+                
                 if (permission === 'granted') {
                     const registration = await registerServiceWorker();
                     if (registration) {
-                        await registration.showNotification('✅ Уведомления включены!', {
-                            body: 'Теперь вы будете получать уведомления о новых сообщениях',
-                            icon: '/linarchat/icon-192.png',
-                            vibrate: [200, 100, 200]
-                        });
-                        showToast('✅ Уведомления включены!');
-                        localStorage.setItem('notifications_enabled', 'true');
-                        return true;
+                        // Проверяем, что SW активен
+                        if (registration.active) {
+                            // Показываем тестовое уведомление
+                            await registration.showNotification('✅ Уведомления включены!', {
+                                body: 'Теперь вы будете получать уведомления о новых сообщениях',
+                                icon: '/linarchat/icon-192.png',
+                                badge: '/linarchat/icon-192.png',
+                                vibrate: [200, 100, 200],
+                                tag: 'test_notification'
+                            });
+                            showToast('✅ Уведомления включены!');
+                            localStorage.setItem('notifications_enabled', 'true');
+                            localStorage.setItem('notification_prompt_shown', 'true');
+                            return true;
+                        } else {
+                            console.log('SW not active yet, waiting...');
+                            // Ждем активации SW
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            await registration.showNotification('✅ Уведомления включены!', {
+                                body: 'Теперь вы будете получать уведомления',
+                                icon: '/linarchat/icon-192.png'
+                            });
+                            showToast('✅ Уведомления включены!');
+                            localStorage.setItem('notifications_enabled', 'true');
+                            return true;
+                        }
                     }
                 } else {
-                    showToast('❌ Для работы уведомлений нужно разрешение');
+                    showToast('❌ Для уведомлений нужно разрешение');
                     return false;
                 }
             } catch (e) {
@@ -934,21 +940,36 @@
         }
 
         function showNotificationPrompt() {
-            if (!isNotificationSupported()) return;
-            if (Notification.permission !== 'default') return;
+            if (!isNotificationSupported()) {
+                console.log('Notifications not supported');
+                return;
+            }
+            
+            if (Notification.permission === 'granted') {
+                console.log('Notifications already granted');
+                return;
+            }
+            
+            if (Notification.permission === 'denied') {
+                console.log('Notifications denied');
+                return;
+            }
             
             const hasBeenShown = localStorage.getItem('notification_prompt_shown');
-            if (hasBeenShown) return;
+            if (hasBeenShown) {
+                console.log('Prompt already shown');
+                return;
+            }
             
+            console.log('Showing notification prompt');
             setTimeout(() => {
                 notificationPrompt.classList.add('active');
-            }, 1500);
+            }, 2000);
         }
         
         allowNotificationsBtn.onclick = async () => {
             notificationPrompt.classList.remove('active');
             await requestNotificationPermission();
-            localStorage.setItem('notification_prompt_shown', 'true');
         };
         
         laterNotificationsBtn.onclick = () => {
@@ -957,54 +978,72 @@
         };
 
         async function showNotification(senderName, message, senderId, messageId) {
-            if (Notification.permission !== 'granted') return;
+            if (Notification.permission !== 'granted') {
+                console.log('Notification permission not granted');
+                return;
+            }
             
+            // Проверяем, не было ли уже уведомление для этого сообщения
             const notificationKey = `${senderId}_${messageId}`;
-            if (lastNotificationTime[notificationKey]) return;
+            if (lastNotificationTime[notificationKey]) {
+                console.log('Duplicate notification prevented');
+                return;
+            }
             lastNotificationTime[notificationKey] = Date.now();
-            
             setTimeout(() => {
                 delete lastNotificationTime[notificationKey];
             }, 5000);
             
+            // Проверяем, открыт ли чат с этим пользователем
             const isAppVisible = document.visibilityState === 'visible' && 
                                  document.hasFocus() && 
                                  currentChat === senderId;
             
-            if (isAppVisible) return;
+            if (isAppVisible) {
+                console.log('Chat is open, not showing notification');
+                return;
+            }
             
             const registration = await navigator.serviceWorker.getRegistration();
-            if (registration) {
-                const notificationBody = message && message.length > 60 ? message.substring(0, 60) + '...' : (message || '📷 Изображение');
-                
-                const options = {
-                    body: notificationBody,
-                    icon: '/linarchat/icon-192.png',
-                    badge: '/linarchat/icon-192.png',
-                    tag: `msg_${senderId}_${messageId}`,
-                    vibrate: [200, 100, 200],
-                    renotify: false,
-                    requireInteraction: true,
-                    data: { 
-                        senderId: senderId,
-                        url: '/linarchat/',
-                        timestamp: Date.now(),
-                        messageId: messageId
-                    },
-                    actions: [
-                        {
-                            action: 'open',
-                            title: '📱 Открыть чат'
-                        }
-                    ]
-                };
-                
-                try {
-                    await registration.showNotification(`📩 ${senderName}`, options);
-                    console.log('Notification shown for:', senderName);
-                } catch (e) {
-                    console.error('Show notification error:', e);
-                }
+            if (!registration) {
+                console.log('No SW registration');
+                return;
+            }
+            
+            if (!registration.active) {
+                console.log('SW not active');
+                return;
+            }
+            
+            const notificationBody = message && message.length > 60 ? message.substring(0, 60) + '...' : (message || '📷 Изображение');
+            
+            const options = {
+                body: notificationBody,
+                icon: '/linarchat/icon-192.png',
+                badge: '/linarchat/icon-192.png',
+                tag: `msg_${senderId}_${messageId}`,
+                vibrate: [200, 100, 200],
+                renotify: false,
+                requireInteraction: true,
+                data: { 
+                    senderId: senderId,
+                    url: '/linarchat/',
+                    timestamp: Date.now(),
+                    messageId: messageId
+                },
+                actions: [
+                    {
+                        action: 'open',
+                        title: '📱 Открыть чат'
+                    }
+                ]
+            };
+            
+            try {
+                await registration.showNotification(`📩 ${senderName}`, options);
+                console.log('Notification shown for:', senderName);
+            } catch (e) {
+                console.error('Show notification error:', e);
             }
         }
 
@@ -1046,6 +1085,7 @@
                             
                             loadedMessages.add(msgId);
                             
+                            // Показываем уведомление ТОЛЬКО если сообщение не прочитано
                             if (!msg.read) {
                                 try {
                                     const senderDoc = await db.collection('users').doc(msg.senderId).get();
@@ -1058,6 +1098,8 @@
                                 } catch (e) {
                                     console.error('Error getting sender:', e);
                                 }
+                            } else {
+                                console.log('Message already read, no notification');
                             }
                         }
                         
@@ -1238,6 +1280,14 @@
                         await doc.ref.update({ delivered: true, deliveredAt: new Date() }); 
                     }
                     if (pending.size > 0) showToast(`📬 Доставлено ${pending.size} сообщений`);
+                    
+                    // Проверяем статус уведомлений
+                    if (Notification.permission === 'granted') {
+                        console.log('Notifications already granted');
+                    } else if (Notification.permission === 'default') {
+                        showNotificationPrompt();
+                    }
+                    
                     return true;
                 }
             } catch (e) { }
@@ -1265,6 +1315,7 @@
             messagesDiv.innerHTML = '<div class="empty-state">💬 Нажмите ☰ и выберите собеседника</div>';
             chatUserNameSpan.textContent = 'Выберите собеседника';
             
+            // Не очищаем сессию, чтобы можно было восстановиться
             showToast('👋 Вы вышли из аккаунта');
         }
 
@@ -1358,6 +1409,11 @@
                 clearSession();
             }
             checkAppState();
+            
+            // Проверяем поддержку уведомлений
+            if ('Notification' in window) {
+                console.log('Notifications supported, status:', Notification.permission);
+            }
         }
         
         initialize();
