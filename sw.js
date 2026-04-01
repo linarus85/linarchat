@@ -10,22 +10,23 @@ self.addEventListener('activate', event => {
     event.waitUntil(clients.claim());
 });
 
+// Убираем обработчик fetch или делаем его пассивным
 self.addEventListener('fetch', event => {
+    // Просто пропускаем все запросы, не пытаемся их кэшировать
     event.respondWith(fetch(event.request));
 });
 
-// Обработка фоновых уведомлений
 self.addEventListener('push', function(event) {
     console.log('Push received:', event);
     if (event.data) {
         const data = event.data.json();
         const options = {
             body: data.body,
-            icon: '/linarchat/icon-192.png',
-            badge: '/linarchat/icon-192.png',
+            icon: 'icon-192.png',
+            badge: 'icon-192.png',
             vibrate: [200, 100, 200],
             data: {
-                url: data.url || '/linarchat/',
+                url: data.url || './',
                 senderId: data.senderId
             },
             actions: [
@@ -43,7 +44,7 @@ self.addEventListener('notificationclick', function(event) {
     console.log('Notification clicked:', event);
     event.notification.close();
     
-    const urlToOpen = event.notification.data?.url || '/linarchat/';
+    const urlToOpen = event.notification.data?.url || './';
     
     event.waitUntil(
         clients.matchAll({
@@ -62,7 +63,6 @@ self.addEventListener('notificationclick', function(event) {
     );
 });
 
-// Синхронизация в фоне
 self.addEventListener('sync', function(event) {
     console.log('Sync event:', event);
     if (event.tag === 'sync-messages') {
