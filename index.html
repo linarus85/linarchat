@@ -359,6 +359,12 @@
             max-width: 85%;
             margin-bottom: 8px;
             animation: fadeIn 0.3s;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .message:active {
+            transform: scale(0.98);
         }
 
         @keyframes fadeIn {
@@ -380,6 +386,7 @@
             padding: 10px 14px;
             border-radius: 18px;
             word-wrap: break-word;
+            position: relative;
         }
 
         .message.own .message-content {
@@ -701,6 +708,84 @@
             background: #e0e0e0;
             color: #666;
         }
+
+        .delete-dialog {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 20px;
+            padding: 24px;
+            width: 300px;
+            text-align: center;
+            z-index: 10003;
+            display: none;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            animation: fadeInScale 0.2s ease;
+        }
+
+        @keyframes fadeInScale {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        .delete-dialog.active {
+            display: block;
+        }
+
+        .delete-dialog h4 {
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .delete-dialog p {
+            margin-bottom: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .delete-dialog button {
+            padding: 10px 20px;
+            margin: 0 8px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .btn-delete {
+            background: #ff4444;
+            color: white;
+        }
+
+        .btn-delete-cancel {
+            background: #e0e0e0;
+            color: #666;
+        }
+
+        .delete-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 10002;
+            display: none;
+        }
+
+        .delete-overlay.active {
+            display: block;
+        }
     </style>
 </head>
 
@@ -778,6 +863,13 @@
         <button class="btn-confirm" id="confirmLogoutBtn">Да, выйти</button>
         <button class="btn-cancel" id="cancelLogoutBtn">Отмена</button>
     </div>
+    <div id="deleteOverlay" class="delete-overlay"></div>
+    <div id="deleteDialog" class="delete-dialog">
+        <h4>🗑️ Удалить сообщение?</h4>
+        <p>Это сообщение будет удалено у всех участников чата</p>
+        <button class="btn-delete" id="confirmDeleteBtn">Удалить</button>
+        <button class="btn-delete-cancel" id="cancelDeleteBtn">Отмена</button>
+    </div>
 
     <script>
         const firebaseConfig = {
@@ -798,6 +890,8 @@
         let unsubscribeMessages = null;
         let loadedMessages = new Set();
         let lastNotificationTime = {};
+        let pendingDeleteMessage = null;
+        let longPressTimer = null;
 
         const loginScreen = document.getElementById('loginScreen');
         const chatScreen = document.getElementById('chatScreen');
@@ -822,6 +916,10 @@
         const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
         const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
         const userProfileBtn = document.getElementById('userProfileBtn');
+        const deleteDialog = document.getElementById('deleteDialog');
+        const deleteOverlay = document.getElementById('deleteOverlay');
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
 
         window.openImageFullscreen = function (url) { modalImage.src = url; imageModal.classList.add('active'); };
         function closeImageModal() { imageModal.classList.remove('active'); modalImage.src = ''; }
@@ -844,6 +942,12 @@
             sidebarOverlay.classList.remove('active'); 
         }
         
+        function vibrate(duration) {
+            if ('vibrate' in navigator) {
+                navigator.vibrate(duration);
+            }
+        }
+        
         menuToggle.onclick = openSidebar;
         sidebarOverlay.onclick = closeSidebar;
         
@@ -859,6 +963,49 @@
         cancelLogoutBtn.onclick = () => {
             logoutConfirm.classList.remove('active');
         };
+        
+        function showDeleteDialog(messageId, chatId) {
+            pendingDeleteMessage = { messageId, chatId };
+            deleteDialog.classList.add('active');
+            deleteOverlay.classList.add('active');
+        }
+        
+        function closeDeleteDialog() {
+            deleteDialog.classList.remove('active');
+            deleteOverlay.classList.remove('active');
+            pendingDeleteMessage = null;
+        }
+        
+        confirmDeleteBtn.onclick = async () => {
+            if (pendingDeleteMessage) {
+                try {
+                    await db.collection('chats')
+                        .doc(pendingDeleteMessage.chatId)
+                        .collection('messages')
+                        .doc(pendingDeleteMessage.messageId)
+                        .delete();
+                    showToast('🗑️ Сообщение удалено');
+                    vibrate([100, 50, 100]);
+                } catch (error) {
+                    console.error('Delete error:', error);
+                    showToast('❌ Ошибка при удалении');
+                }
+            }
+            closeDeleteDialog();
+        };
+        
+        cancelDeleteBtn.onclick = () => {
+            closeDeleteDialog();
+        };
+        
+        deleteOverlay.onclick = () => {
+            closeDeleteDialog();
+        };
+        
+        function handleLongPress(messageId, chatId) {
+            vibrate(200);
+            showDeleteDialog(messageId, chatId);
+        }
 
         async function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
@@ -900,9 +1047,7 @@
                 if (permission === 'granted') {
                     const registration = await registerServiceWorker();
                     if (registration) {
-                        // Проверяем, что SW активен
                         if (registration.active) {
-                            // Показываем тестовое уведомление
                             await registration.showNotification('✅ Уведомления включены!', {
                                 body: 'Теперь вы будете получать уведомления о новых сообщениях',
                                 icon: '/linarchat/icon-192.png',
@@ -913,17 +1058,6 @@
                             showToast('✅ Уведомления включены!');
                             localStorage.setItem('notifications_enabled', 'true');
                             localStorage.setItem('notification_prompt_shown', 'true');
-                            return true;
-                        } else {
-                            console.log('SW not active yet, waiting...');
-                            // Ждем активации SW
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                            await registration.showNotification('✅ Уведомления включены!', {
-                                body: 'Теперь вы будете получать уведомления',
-                                icon: '/linarchat/icon-192.png'
-                            });
-                            showToast('✅ Уведомления включены!');
-                            localStorage.setItem('notifications_enabled', 'true');
                             return true;
                         }
                     }
@@ -940,28 +1074,12 @@
         }
 
         function showNotificationPrompt() {
-            if (!isNotificationSupported()) {
-                console.log('Notifications not supported');
-                return;
-            }
-            
-            if (Notification.permission === 'granted') {
-                console.log('Notifications already granted');
-                return;
-            }
-            
-            if (Notification.permission === 'denied') {
-                console.log('Notifications denied');
-                return;
-            }
+            if (!isNotificationSupported()) return;
+            if (Notification.permission !== 'default') return;
             
             const hasBeenShown = localStorage.getItem('notification_prompt_shown');
-            if (hasBeenShown) {
-                console.log('Prompt already shown');
-                return;
-            }
+            if (hasBeenShown) return;
             
-            console.log('Showing notification prompt');
             setTimeout(() => {
                 notificationPrompt.classList.add('active');
             }, 2000);
@@ -978,42 +1096,23 @@
         };
 
         async function showNotification(senderName, message, senderId, messageId) {
-            if (Notification.permission !== 'granted') {
-                console.log('Notification permission not granted');
-                return;
-            }
+            if (Notification.permission !== 'granted') return;
             
-            // Проверяем, не было ли уже уведомление для этого сообщения
             const notificationKey = `${senderId}_${messageId}`;
-            if (lastNotificationTime[notificationKey]) {
-                console.log('Duplicate notification prevented');
-                return;
-            }
+            if (lastNotificationTime[notificationKey]) return;
             lastNotificationTime[notificationKey] = Date.now();
             setTimeout(() => {
                 delete lastNotificationTime[notificationKey];
             }, 5000);
             
-            // Проверяем, открыт ли чат с этим пользователем
             const isAppVisible = document.visibilityState === 'visible' && 
                                  document.hasFocus() && 
                                  currentChat === senderId;
             
-            if (isAppVisible) {
-                console.log('Chat is open, not showing notification');
-                return;
-            }
+            if (isAppVisible) return;
             
             const registration = await navigator.serviceWorker.getRegistration();
-            if (!registration) {
-                console.log('No SW registration');
-                return;
-            }
-            
-            if (!registration.active) {
-                console.log('SW not active');
-                return;
-            }
+            if (!registration || !registration.active) return;
             
             const notificationBody = message && message.length > 60 ? message.substring(0, 60) + '...' : (message || '📷 Изображение');
             
@@ -1041,7 +1140,6 @@
             
             try {
                 await registration.showNotification(`📩 ${senderName}`, options);
-                console.log('Notification shown for:', senderName);
             } catch (e) {
                 console.error('Show notification error:', e);
             }
@@ -1085,7 +1183,6 @@
                             
                             loadedMessages.add(msgId);
                             
-                            // Показываем уведомление ТОЛЬКО если сообщение не прочитано
                             if (!msg.read) {
                                 try {
                                     const senderDoc = await db.collection('users').doc(msg.senderId).get();
@@ -1098,8 +1195,6 @@
                                 } catch (e) {
                                     console.error('Error getting sender:', e);
                                 }
-                            } else {
-                                console.log('Message already read, no notification');
                             }
                         }
                         
@@ -1136,7 +1231,7 @@
                 .onSnapshot((snapshot) => {
                     const messages = []; 
                     snapshot.forEach(doc => messages.push({ id: doc.id, ...doc.data() }));
-                    renderMessages(messages);
+                    renderMessages(messages, chatId);
                     messages.forEach(msg => { 
                         if (msg.receiverId === currentUser.uid && !msg.read) { 
                             db.collection('chats').doc(chatId).collection('messages')
@@ -1177,7 +1272,7 @@
             });
         }
 
-        function renderMessages(messages) {
+        function renderMessages(messages, currentChatId) {
             if (messages.length === 0) { 
                 messagesDiv.innerHTML = '<div class="empty-state">💬 Напишите первое сообщение</div>'; 
                 return; 
@@ -1194,11 +1289,19 @@
                 }
                 let content = '';
                 if (isImage) { 
-                    content = `<img src="${msg.text}" class="message-image" onclick="openImageFullscreen('${msg.text.replace(/'/g, "\\'")}')" loading="lazy">`; 
+                    content = `<img src="${msg.text}" class="message-image" onclick="event.stopPropagation(); openImageFullscreen('${msg.text.replace(/'/g, "\\'")}')" loading="lazy">`; 
                 } else { 
                     content = `<div class="message-text">${escapeHtml(msg.text)}</div>`; 
                 }
-                return `<div class="message ${isOwn ? 'own' : 'other'}">
+                return `<div class="message ${isOwn ? 'own' : 'other'}" 
+                            data-message-id="${msg.id}"
+                            data-chat-id="${currentChatId}"
+                            ontouchstart="startLongPressTimer(event, '${msg.id}', '${currentChatId}')"
+                            ontouchend="clearLongPressTimer()"
+                            ontouchmove="clearLongPressTimer()"
+                            onmousedown="startLongPressTimer(event, '${msg.id}', '${currentChatId}')"
+                            onmouseup="clearLongPressTimer()"
+                            onmouseleave="clearLongPressTimer()">
                             <div class="message-content">
                                 ${content}
                                 <div class="message-time">${time} ${statusIcon}</div>
@@ -1206,6 +1309,22 @@
                         </div>`;
             }).join('');
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function startLongPressTimer(event, messageId, chatId) {
+            if (longPressTimer) clearTimeout(longPressTimer);
+            event.preventDefault();
+            longPressTimer = setTimeout(() => {
+                handleLongPress(messageId, chatId);
+                longPressTimer = null;
+            }, 800);
+        }
+        
+        function clearLongPressTimer() {
+            if (longPressTimer) {
+                clearTimeout(longPressTimer);
+                longPressTimer = null;
+            }
         }
 
         sendBtn.onclick = async () => {
@@ -1281,7 +1400,6 @@
                     }
                     if (pending.size > 0) showToast(`📬 Доставлено ${pending.size} сообщений`);
                     
-                    // Проверяем статус уведомлений
                     if (Notification.permission === 'granted') {
                         console.log('Notifications already granted');
                     } else if (Notification.permission === 'default') {
@@ -1315,7 +1433,6 @@
             messagesDiv.innerHTML = '<div class="empty-state">💬 Нажмите ☰ и выберите собеседника</div>';
             chatUserNameSpan.textContent = 'Выберите собеседника';
             
-            // Не очищаем сессию, чтобы можно было восстановиться
             showToast('👋 Вы вышли из аккаунта');
         }
 
@@ -1410,7 +1527,6 @@
             }
             checkAppState();
             
-            // Проверяем поддержку уведомлений
             if ('Notification' in window) {
                 console.log('Notifications supported, status:', Notification.permission);
             }
