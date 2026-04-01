@@ -10,10 +10,10 @@
     <meta name="theme-color" content="#075e54">
     <title>LinarChat</title>
 
-    <!-- Ссылки на отдельные файлы -->
     <link rel="manifest" href="/linarchat/manifest.json">
-    <link rel="apple-touch-icon" href="icon-192.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+    <link rel="apple-touch-icon" href="/linarchat/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/linarchat/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/linarchat/icon-512.png">
 
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
@@ -156,41 +156,78 @@
 
         .sidebar-header {
             padding: 20px;
-            background: #075e54;
+            background: linear-gradient(135deg, #075e54 0%, #128C7E 100%);
             color: white;
             flex-shrink: 0;
+            text-align: center;
         }
 
-        .user-info {
-            margin-bottom: 10px;
+        .logo-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .logo-icon img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+
+        .logo-text {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .logo-text span {
+            color: #25D366;
+        }
+
+        .user-profile {
+            margin-top: 16px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
         }
 
         .user-name-display {
             font-weight: bold;
             font-size: 18px;
+            margin-bottom: 4px;
+            word-break: break-word;
         }
 
-        .user-id {
-            font-size: 11px;
-            opacity: 0.8;
-            margin-top: 5px;
-            word-break: break-all;
+        .user-status-badge {
+            font-size: 12px;
+            opacity: 0.9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
         }
 
-        .logout-btn, .copy-btn, .notify-btn {
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            color: white;
-            padding: 10px;
-            border-radius: 8px;
-            cursor: pointer;
-            margin-top: 8px;
-            width: 100%;
-            font-size: 14px;
-        }
-
-        .notify-btn {
-            background: rgba(37, 211, 102, 0.8);
+        .user-status-badge::before {
+            content: "●";
+            color: #25D366;
+            font-size: 10px;
         }
 
         .users-list {
@@ -206,10 +243,19 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: background 0.2s;
+        }
+
+        .user-item:hover {
+            background: #f5f5f5;
         }
 
         .user-item:active {
             background: #e8f0fe;
+        }
+
+        .user-info-wrapper {
+            flex: 1;
         }
 
         .user-name {
@@ -289,6 +335,11 @@
             left: 10px;
             top: 8px;
             z-index: 10;
+            transition: background 0.2s;
+        }
+
+        .menu-btn:active {
+            background: rgba(255, 255, 255, 0.3);
         }
 
         @media (min-width: 769px) {
@@ -436,6 +487,11 @@
             align-items: center;
             justify-content: center;
             flex-shrink: 0;
+            transition: transform 0.2s;
+        }
+
+        .send-btn:active {
+            transform: scale(0.95);
         }
 
         .toast {
@@ -537,6 +593,12 @@
             align-items: center;
             justify-content: center;
         }
+
+        .typing-indicator {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-left: 8px;
+        }
     </style>
 </head>
 
@@ -545,7 +607,10 @@
         <div id="loginScreen" class="screen active">
             <div class="login-container">
                 <div class="login-card">
-                    <h2>📱 LinarChat</h2>
+                    <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+                        <img src="/linarchat/icon-192.png" alt="LinarChat" style="width: 80px; height: 80px; border-radius: 20px;">
+                    </div>
+                    <h2>LinarChat</h2>
                     <p>Введите ваше имя</p>
                     <input type="text" id="username" placeholder="Ваше имя" maxlength="30" autocomplete="off">
                     <button class="btn-primary" id="loginBtn">Войти</button>
@@ -558,13 +623,18 @@
                 <div id="sidebarOverlay" class="sidebar-overlay"></div>
                 <div class="sidebar" id="sidebar">
                     <div class="sidebar-header">
-                        <div class="user-info">
-                            <div class="user-name-display" id="currentUserName"></div>
-                            <div class="user-id" id="currentUserId"></div>
+                        <div class="logo-section">
+                            <div class="logo-icon">
+                                <img src="/linarchat/icon-192.png" alt="LinarChat">
+                            </div>
+                            <div class="logo-text">
+                                Linar<span>Chat</span>
+                            </div>
                         </div>
-                        <button class="copy-btn" id="copyIdBtn">📋 Копировать ID</button>
-                        <button class="notify-btn" id="enableNotificationsBtn">🔔 Включить уведомления</button>
-                        <button class="logout-btn" id="logoutBtn">🚪 Выйти</button>
+                        <div class="user-profile">
+                            <div class="user-name-display" id="currentUserName"></div>
+                            <div class="user-status-badge">Online</div>
+                        </div>
                     </div>
                     <div class="users-list" id="usersList">
                         <div class="empty-state">👥 Загрузка...</div>
@@ -614,23 +684,18 @@
         let unsubscribeMessages = null;
         let loadedMessages = new Set();
 
-        // DOM элементы
         const loginScreen = document.getElementById('loginScreen');
         const chatScreen = document.getElementById('chatScreen');
         const usernameInput = document.getElementById('username');
         const loginBtn = document.getElementById('loginBtn');
-        const logoutBtn = document.getElementById('logoutBtn');
-        const copyIdBtn = document.getElementById('copyIdBtn');
         const usersList = document.getElementById('usersList');
         const messagesDiv = document.getElementById('messages');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
         const currentUserNameSpan = document.getElementById('currentUserName');
-        const currentUserIdSpan = document.getElementById('currentUserId');
         const chatUserNameSpan = document.getElementById('chatUserName');
         const menuToggle = document.getElementById('menuToggle');
         const sidebarOverlay = document.getElementById('sidebarOverlay');
-        const enableNotificationsBtn = document.getElementById('enableNotificationsBtn');
         const imageBtn = document.getElementById('imageBtn');
         const imageInput = document.getElementById('imageInput');
         const modalImage = document.getElementById('modalImage');
@@ -660,7 +725,6 @@
         menuToggle.onclick = openSidebar;
         sidebarOverlay.onclick = closeSidebar;
 
-        // Регистрация Service Worker
         async function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
                 try {
@@ -674,49 +738,10 @@
             return null;
         }
 
-        // Функция для проверки поддержки уведомлений
         function isNotificationSupported() {
             return 'Notification' in window && 'serviceWorker' in navigator;
         }
 
-        // Улучшенная функция включения уведомлений
-        async function enableNotifications() {
-            if (!isNotificationSupported()) {
-                showToast('❌ Ваш браузер не поддерживает уведомления');
-                return false;
-            }
-            
-            try {
-                let permission = Notification.permission;
-                
-                if (permission !== 'granted') {
-                    permission = await Notification.requestPermission();
-                }
-                
-                if (permission === 'granted') {
-                    const registration = await registerServiceWorker();
-                    
-                    if (registration) {
-                        showToast('✅ Уведомления включены!');
-                        enableNotificationsBtn.textContent = '🔔 Уведомления включены';
-                        enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)';
-                        localStorage.setItem('notifications_enabled', 'true');
-                        return true;
-                    }
-                } else {
-                    showToast('❌ Разрешите уведомления в настройках браузера');
-                    return false;
-                }
-            } catch (e) {
-                console.error('Notification error:', e);
-                showToast('❌ Ошибка: ' + e.message);
-                return false;
-            }
-        }
-        
-        enableNotificationsBtn.onclick = enableNotifications;
-
-        // Улучшенная функция показа уведомлений
         async function showNotification(senderName, message, senderId) {
             if (Notification.permission !== 'granted') return;
             
@@ -732,7 +757,7 @@
                     body: message.length > 60 ? message.substring(0, 60) + '...' : message,
                     icon: '/linarchat/icon-192.png',
                     badge: '/linarchat/icon-192.png',
-                    tag: senderId,
+                    tag: `msg_${senderId}_${Date.now()}`,
                     vibrate: [200, 100, 200],
                     renotify: false,
                     requireInteraction: true,
@@ -745,10 +770,6 @@
                         {
                             action: 'open',
                             title: '📱 Открыть чат'
-                        },
-                        {
-                            action: 'close',
-                            title: '🔕 Закрыть'
                         }
                     ]
                 };
@@ -757,16 +778,10 @@
                     await registration.showNotification(`📩 ${senderName}`, options);
                 } catch (e) {
                     console.error('Show notification error:', e);
-                    await registration.showNotification(`📩 Новое сообщение от ${senderName}`, {
-                        body: message.length > 60 ? message.substring(0, 60) + '...' : message,
-                        icon: '/linarchat/icon-192.png',
-                        vibrate: [200, 100, 200]
-                    });
                 }
             }
         }
 
-        // Картинки
         imageBtn.onclick = () => imageInput.click();
         imageInput.onchange = async (e) => {
             const file = e.target.files[0];
@@ -790,7 +805,6 @@
             imageInput.value = '';
         };
 
-        // Сообщения
         function listenForMessages() {
             if (!currentUser) return;
             
@@ -825,9 +839,7 @@
                                     delivered: true, 
                                     deliveredAt: new Date() 
                                 });
-                            } catch (e) {
-                                console.error('Error marking delivered:', e);
-                            }
+                            } catch (e) {}
                         }
                     }
                 }
@@ -883,7 +895,7 @@
                 } else {
                     usersList.innerHTML = users.map(user => `
                         <div class="user-item" onclick="selectUser('${user.id}')">
-                            <div>
+                            <div class="user-info-wrapper">
                                 <div class="user-name">${escapeHtml(user.username)}</div>
                                 <div class="user-status ${user.isOnline ? 'online' : 'offline'}">
                                     ${user.isOnline ? '🟢 Онлайн' : '⚫ Офлайн'}
@@ -980,7 +992,6 @@
                     currentUser = { uid: saved.uid, username: userData.username }; 
                     loadedMessages.clear();
                     currentUserNameSpan.textContent = userData.username;
-                    currentUserIdSpan.textContent = `ID: ${currentUser.uid.slice(0, 8)}...`;
                     await db.collection('users').doc(currentUser.uid).update({ 
                         status: 'online', 
                         lastSeen: new Date().toISOString() 
@@ -999,12 +1010,6 @@
                         await doc.ref.update({ delivered: true, deliveredAt: new Date() }); 
                     }
                     if (pending.size > 0) showToast(`📬 Доставлено ${pending.size} сообщений`);
-                    
-                    const notificationsEnabled = localStorage.getItem('notifications_enabled');
-                    if (notificationsEnabled === 'true' && Notification.permission === 'granted') {
-                        enableNotificationsBtn.textContent = '🔔 Уведомления включены';
-                        enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)';
-                    }
                     return true;
                 }
             } catch (e) { }
@@ -1029,45 +1034,22 @@
                 });
                 saveSession(username, currentUser.uid);
                 currentUserNameSpan.textContent = username;
-                currentUserIdSpan.textContent = `ID: ${currentUser.uid.slice(0, 8)}...`;
                 loginScreen.classList.remove('active'); 
                 chatScreen.classList.add('active');
                 loadUsers(); 
                 listenForMessages();
                 showToast(`✅ Добро пожаловать, ${username}!`);
                 await registerServiceWorker();
-                setTimeout(() => { 
-                    if (Notification.permission !== 'granted') enableNotifications(); 
-                    else { 
-                        enableNotificationsBtn.textContent = '🔔 Уведомления включены'; 
-                        enableNotificationsBtn.style.background = 'rgba(37, 211, 102, 0.8)'; 
-                    } 
-                }, 1000);
             } catch (error) { showToast('❌ Ошибка: ' + error.message); }
         };
 
-        logoutBtn.onclick = async () => {
-            if (currentUser) await db.collection('users').doc(currentUser.uid).update({ 
-                status: 'offline', lastSeen: new Date().toISOString() 
+        function autoLogout() {
+            window.addEventListener('beforeunload', async () => { 
+                if (currentUser) await db.collection('users').doc(currentUser.uid).update({ 
+                    status: 'offline', lastSeen: new Date().toISOString() 
+                }); 
             });
-            await auth.signOut(); 
-            clearSession(); 
-            currentUser = null; 
-            currentChat = null; 
-            loadedMessages.clear();
-            if (unsubscribeMessages) unsubscribeMessages();
-            loginScreen.classList.add('active'); 
-            chatScreen.classList.remove('active'); 
-            usernameInput.value = ''; 
-            showToast('👋 Вы вышли');
-        };
-        
-        copyIdBtn.onclick = () => { 
-            if (currentUser) { 
-                navigator.clipboard.writeText(currentUser.uid); 
-                showToast('✅ ID скопирован!'); 
-            } 
-        };
+        }
         
         function escapeHtml(text) { 
             const div = document.createElement('div'); 
@@ -1083,24 +1065,15 @@
             } 
         }, 15000);
         
-        window.addEventListener('beforeunload', async () => { 
-            if (currentUser) await db.collection('users').doc(currentUser.uid).update({ 
-                status: 'offline', lastSeen: new Date().toISOString() 
-            }); 
-        });
+        autoLogout();
         
         function checkAppState() {
             document.addEventListener('visibilitychange', () => {
-                if (document.visibilityState === 'visible') {
-                    console.log('App is now visible');
-                    if (currentUser) {
-                        db.collection('users').doc(currentUser.uid).update({
-                            lastSeen: new Date().toISOString(),
-                            status: 'online'
-                        });
-                    }
-                } else {
-                    console.log('App is hidden');
+                if (document.visibilityState === 'visible' && currentUser) {
+                    db.collection('users').doc(currentUser.uid).update({
+                        lastSeen: new Date().toISOString(),
+                        status: 'online'
+                    });
                 }
             });
         }
@@ -1109,7 +1082,6 @@
             if (!currentUser) return;
             const fifteenDaysAgo = new Date();
             fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-            console.log(`🧹 Начинаю очистку сообщений старше ${fifteenDaysAgo.toLocaleDateString()}`);
             try {
                 const allChats = await db.collection('chats').get();
                 let deletedCount = 0;
@@ -1130,7 +1102,6 @@
                 }
                 if (deletedCount > 0) {
                     console.log(`✅ Удалено ${deletedCount} старых сообщений`);
-                    showToast(`🧹 Удалено ${deletedCount} старых сообщений`);
                 }
             } catch (error) {
                 console.error('❌ Ошибка при удалении:', error);
